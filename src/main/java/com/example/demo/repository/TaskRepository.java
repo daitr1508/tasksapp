@@ -15,5 +15,4 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 
     @Query("SELECT t FROM Task t where t.completed = :completed")
     List<Task> findTasksByCompletionStatus(@Param("completed") boolean completed);
-
 }
