@@ -1,44 +1,83 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.TaskRequest;
+import com.example.demo.dto.TaskResponse;
 import com.example.demo.entity.Task;
-import com.example.demo.repository.TaskRepository;
 import com.example.demo.service.TaskService;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Repository;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-@RestController
+@RestController // @Controller and @ResponseBody
 @RequestMapping("/api/v1/tasks")
 public class TaskController {
+
     private final TaskService taskService;
 
+    //Constructor Injection
+    //@Autowired
     public TaskController(TaskService taskService) {
         this.taskService = taskService;
     }
 
     @GetMapping
-    public List<Task> getAllTasks() {
-        return taskService.getAllTasks();
+    public ResponseEntity<Map<String, Object>> getAllTasks(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "DESC") String sortDir) {
+        Sort sort = sortDir.equalsIgnoreCase("ASC") ?
+                Sort.by(sortBy).ascending() :
+                Sort.by(sortBy).descending();
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+        Page<Task> taskPage = taskService.getAllTasks(pageable);
+
+        List<TaskResponse> tasks = taskPage.getContent()
+                .stream()
+                .map(task -> new TaskResponse(
+                        task.getId(),
+                        task.getTitle(),
+                        task.getDescription(),
+                        task.getCompleted(),
+                        task.getCreatedAt()))
+                .toList();
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("tasks", tasks);
+        response.put("currentPage", taskPage.getNumber());
+        response.put("totalItems", taskPage.getTotalElements());
+        response.put("totalPages", taskPage.getTotalPages());
+        response.put("hasNext", taskPage.hasNext());
+        response.put("hasPrevious", taskPage.hasPrevious());
+
+        return new ResponseEntity<>(response, HttpStatus.OK);
     }
 
+
     @GetMapping("/{id}")
-    public Task getTaskById(@PathVariable Long id) {
+    public TaskResponse getTaskById (@PathVariable Long id) {
         return taskService.getTaskById(id);
     }
 
     @PostMapping
-    public ResponseEntity<Task> createTask(@Valid @RequestBody Task task) {
-        Task savedTask = taskService.createTask(task);
+    public ResponseEntity<TaskResponse> createTask(@Valid @RequestBody TaskRequest task) {
+        TaskResponse savedTask = taskService.createTask(task);
         return ResponseEntity.status(HttpStatus.CREATED).body(savedTask);
     }
 
     @PutMapping("/{id}")
-    public Task updateTask(@PathVariable Long id,@Valid @RequestBody Task updatedTask) {
+    public TaskResponse updateTask (@PathVariable Long id,
+                                    @Valid @RequestBody TaskRequest updatedTask) {
         return taskService.updateTask(id, updatedTask);
     }
 
@@ -49,13 +88,19 @@ public class TaskController {
     }
 
     @GetMapping("/completed/{status}")
-    public List<Task> getCompletedByStatus(@PathVariable boolean status) {
-        return taskService.getCompletedTask(status);
+    public List<TaskResponse> getTasksByCompletions(@PathVariable boolean status) {
+        return taskService.getTasksByCompletionStatus(status);
     }
 
     @GetMapping("/search")
-    public List<Task> searchTaskByTitle(@RequestParam String title) {
-        return taskService.searchTaskByTitle(title);
+    public List<TaskResponse> searchTasksByTitle(@RequestParam String title) {
+        return taskService.searchTasksByTitle(title);
     }
 
+    /**
+     * 200 OK - Successful GET, PUT, DELETE
+     * 201 Created - Successful POST (we should return this)
+     * 404 Not Found - Resource doesn't exist
+     * 400 Bad Request - Invalid data
+     */
 }
